@@ -589,6 +589,15 @@ var p = DisplayObject.prototype = new createjs.EventDispatcher();
 	 */
 	p.cursor = null;
 
+    /**
+     * A zIndex property that orders DisplayObjects back to front. It's only used when {{#crossLink "Stage/optimizeBatchRendering:property"}}{{/crossLink}}
+     * is true.
+     * @property zIndex
+     * @type {Number}
+     * @default 0
+     */
+    p.zIndex = 0;
+
 // private properties:
 
 	/**

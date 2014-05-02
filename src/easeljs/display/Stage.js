@@ -239,6 +239,17 @@ var p = Stage.prototype = new createjs.Container();
 	 **/
 	p.mouseMoveOutside = false;
 
+    /**
+     * If true, {{#crossLink "Stage/draw"}}{{/crossLink}} will try to optimize rendering by taking into account
+     * {{#crossLink "DisplayObject/zIndex:property"}}{{/crossLink}}. The idea is to do some batch rendering,
+     * grouping together elements that share multiple properties (texture, color, etc.).
+     * When you use this mode transforms on intermediate Containers won't be taken into account.
+     * @property optimizeBatchRendering
+     * @type Boolean
+     * @default false
+     **/
+    p.optimizeBatchRendering = false;
+
 	/**
 	 * The hitArea property is not supported for Stage.
 	 * @property hitArea
@@ -602,7 +613,92 @@ var p = Stage.prototype = new createjs.Container();
 		return "[Stage (name="+  this.name +")]";
 	};
 
+    /**
+     * @property Container_draw
+     * @type Function
+     * @private
+     **/
+    p.Container_draw = p.draw;
+
+    /**
+     * Draws the display object into the specified context ignoring its visible, alpha, shadow, and transform.
+     * Returns true if the draw was handled (useful for overriding functionality).
+     *
+     * NOTE: This method is mainly for internal use, though it may be useful for advanced uses.
+     * @method draw
+     * @param {CanvasRenderingContext2D} ctx The canvas 2D context object to draw into.
+     * @param {Boolean} [ignoreCache=false] Indicates whether the draw operation should ignore any current cache.
+     * For example, used for drawing the cache (to prevent it from simply drawing an existing cache back
+     * into itself).
+     **/
+    p.draw = function(ctx, ignoreCache) {
+        if (this.DisplayObject_draw(ctx, ignoreCache)) { return true; }
+
+        if(this.optimizeBatchRendering) {
+            // gather recursively and group by zIndex.
+            var zHash = [];
+            var zHashIndexes = [];
+            this._gatherDescendants(this, zHash, zHashIndexes);
+
+            // TODO: reorder objects with same zIndex, grouping them by similar properties?
+
+            // finally draw children
+            var l = zHashIndexes.length;
+            for (var i=0; i<l; i++) {
+                var batch = zHash[zHashIndexes[i]];
+                var bl = batch.length;
+                for(var j = 0; j < bl; j++) {
+                    var child = batch[j];
+                    ctx.save();
+                    child.updateContext(ctx);
+                    child.draw(ctx);
+                    ctx.restore();
+                }
+            }
+        } else {
+            return this.Container_draw(ctx, ignoreCache);
+        }
+
+        return true;
+    };
+
 	// private methods:
+
+    /**
+     * @method _gatherDescendants
+     * @private
+     * @param {DisplayObject} descendant
+     * @param {Array} zHash
+     * @param {Array} zHashIndexes
+     **/
+    p._gatherDescendants = function(descendant, zHash, zHashIndexes) {
+        if(descendant.isVisible()) {
+            if(descendant.children) {
+                // this ensures we don't have issues with display list changes that occur during a draw:
+                var list = descendant.children.slice(0);
+                // gather recursively and group by zIndex.
+                var l = list.length;
+                var i;
+                var child;
+                for (i=0; i<l; i++) {
+                    child = list[i];
+                    if (!child.isVisible()) { continue; }
+
+                    this._gatherDescendants(child, zHash, zHashIndexes);
+                }
+            } else {
+                var z = descendant.zIndex;
+                if (z in zHashIndexes) {
+                    //We already have at least one descendant with that zIndex.
+                } else {
+                    //It's the first descendant with that zIndex.
+                    zHash[z] = [];
+                    zHashIndexes.push(z);
+                }
+                zHash[z].push(descendant);
+            }
+        }
+    };
 
 	/**
 	 * @method _getElementRect

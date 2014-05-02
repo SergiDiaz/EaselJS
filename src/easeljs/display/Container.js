@@ -126,7 +126,7 @@ var p = Container.prototype = new createjs.DisplayObject();
 	/**
 	 * @property DisplayObject_draw
 	 * @type Function
-	 * @private
+	 * @protected
 	 **/
 	p.DisplayObject_draw = p.draw;
 
